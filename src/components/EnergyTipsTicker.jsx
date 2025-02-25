@@ -8,7 +8,7 @@ const EnergyTipsTicker = () => {
     "💡 Turn off lights when leaving a room to save up electricity",
     "🌡️ Setting your thermostat 1°C lower can reduce energy bills",
     "🔌 Unplug devices on standby to save on energy bills",
-    "⚡ Use LED bulbs to reduce lighting energy consumption by 75%",
+    "⚡ Use LED bulbs to reduce lighting energy consumption",
     "🌞 Use natural light when possible to save electricity",
     "🧺 Run full loads of laundry to maximize energy efficiency",
     "❄️ Keep your refrigerator at 3-4°C for optimal energy efficiency",

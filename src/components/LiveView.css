@@ -84,7 +84,12 @@
   text-align: center;
   box-shadow: 0 0 15px rgba(255, 153, 0, 0.8);
   animation: blink 1.5s infinite alternate;
+  max-width: 400px; /* Control the width to force two lines */
+  word-wrap: break-word; /* Ensure text breaks into two lines if needed */
+  margin-left: auto;
+  margin-right: auto;
 }
+
 
 /* Blinking effect */
 @keyframes blink {
@@ -142,6 +147,8 @@
   .warning-message {
     font-size: 0.9rem;
     padding: 12px;
+    max-width: 90%; /* Adjust width to fit smaller screens */
+    word-wrap: break-word; /* Ensure text wraps correctly */
   }
 
   .reset-button {

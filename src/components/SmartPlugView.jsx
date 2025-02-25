@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
-import './SmartPlugView.css'; // Import your CSS file
+import { getDatabase, ref, onValue, set } from "firebase/database";
+import "./SmartPlugView.css"; 
+import { app } from "../firebase"; // Import Firebase config
 
 const SmartPlugView = () => {
     const [plugReadings, setPlugReadings] = useState(null);
@@ -16,53 +18,59 @@ const SmartPlugView = () => {
     // State for relay control (ON/OFF)
     const [isRelayOn, setIsRelayOn] = useState(false);
 
-    // Function to fetch plug readings
-    const fetchPlugReadings = async () => {
-        try {
-            const response = await fetch("https://192.168.124.201/plug-readings", { cache: "no-store" });
-            if (!response.ok) {
-                throw new Error("Failed to fetch plug readings");
-            }
-            const data = await response.json();
-            setPlugReadings(data);
-        } catch (err) {
-            setError(err.message);
-        }
-    };
+    // Initialize Firebase database
+    const db = getDatabase(app);
 
-    // Function to toggle relay (Turn ON or OFF the plug)
+    // Function to fetch data from Firebase
+    useEffect(() => {
+        const readingsRef = ref(db, "/SEUWS/PlugMeter/");
+        
+        const unsubscribe = onValue(readingsRef, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                setPlugReadings(data);
+                setIsRelayOn(data.RelayStatus); // Set relay status
+            }
+        }, (error) => {
+            setError(error.message);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Function to toggle relay (Turn ON or OFF)
     const toggleRelay = async () => {
         try {
-            const state = isRelayOn ? "off" : "on"; // Toggle state
-            const response = await fetch(`https://192.168.124.201/relay-${state}`, {
-                method: "GET",
-            });
-            if (!response.ok) throw new Error(`Failed to turn relay ${state}`);
-            setIsRelayOn(!isRelayOn);
+            const newState = !isRelayOn;
+            await set(ref(db, "/SEUWS/PlugMeter/RelayStatus"), newState);
+            setIsRelayOn(newState);
         } catch (err) {
-            setError(err.message);
+            setError("Failed to update relay status");
         }
     };
 
-    // Function to reset energy counter
+    // ✅ Function to reset energy counter
     const resetEnergy = async () => {
         try {
-            const response = await fetch("https://192.168.124.201/reset-energy", { cache: "no-store" });
-            if (!response.ok) throw new Error("Failed to reset energy");
-            alert("Energy counter reset successfully!");
+            await set(ref(db, "/SEUWS/PlugMeter/EnergyUsage"), 0);
+            
+            // ✅ After resetting, listen for energy updates
+            const energyRef = ref(db, "/SEUWS/PlugMeter/EnergyUsage");
+            onValue(energyRef, (snapshot) => {
+                setPlugReadings(prev => ({ ...prev, EnergyUsage: snapshot.val() }));
+            });
 
-            // Update UI state manually to reflect reset energy
-            setPlugReadings((prev) => ({ ...prev, energy: 0 }));
+            alert("Energy counter reset successfully!");
         } catch (err) {
-            setError(err.message);
+            setError("Failed to reset energy");
         }
     };
 
     // Calculate current based on device voltage and power
     const calculateCurrent = () => {
         if (deviceVoltage && devicePower) {
-            const current = devicePower / deviceVoltage;  // Power = Voltage * Current
-            return current.toFixed(2);  // Return current with 2 decimal places
+            const current = devicePower / deviceVoltage;  
+            return current.toFixed(2);
         }
         return 0;
     };
@@ -71,7 +79,7 @@ const SmartPlugView = () => {
     const handleSubmit = (e) => {
         e.preventDefault();
         if (plugReadings) {
-            if (plugReadings.power > devicePower) {
+            if (plugReadings.Power > devicePower) {
                 setIsFaulty(true);
                 setFaultMessage("The device seems to be faulty! Power reading exceeds the rated power.");
             } else {
@@ -80,13 +88,6 @@ const SmartPlugView = () => {
             }
         }
     };
-
-    // Fetch data on component mount and periodically
-    useEffect(() => {
-        fetchPlugReadings();
-        const interval = setInterval(fetchPlugReadings, 3000);
-        return () => clearInterval(interval);
-    }, []);
 
     return (
         <div className="smart-plug-container">
@@ -126,10 +127,10 @@ const SmartPlugView = () => {
             {/* Display plug meter readings */}
             {plugReadings ? (
                 <div className="readings-card">
-                    <p><strong>Voltage:</strong> {plugReadings.voltage} V</p>
-                    <p><strong>Current:</strong> {plugReadings.current} A</p>
-                    <p><strong>Power:</strong> {plugReadings.power} W</p>
-                    <p><strong>Energy:</strong> {plugReadings.energy} kWh</p>
+                    <p><strong>Voltage:</strong> {Math.round(plugReadings.Voltage)} V</p>
+                    <p><strong>Current:</strong> {plugReadings.Current} A</p>
+                    <p><strong>Power:</strong> {plugReadings.Power} W</p>
+                    <p><strong>Energy:</strong> {plugReadings.EnergyUsage} kWh</p>
                 </div>
             ) : (
                 <p className="loading-message">Loading...</p>

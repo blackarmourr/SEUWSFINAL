@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { fetchReadings, resetEnergy } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { realtimeDb } from '../firebase'; // Corrected import
+import { ref, onValue, set } from 'firebase/database';
 import './LiveView.css';
 
 const LiveView = () => {
@@ -12,34 +13,23 @@ const LiveView = () => {
     const [error, setError] = useState(null);
     const [warning, setWarning] = useState(null);
     const [resetting, setResetting] = useState(false);
-    const prevReadings = useRef(readings);
-
-    const fetchWithRetry = async (retries = 5, delay = 1000) => {
-        try {
-            return await fetchReadings();
-        } catch (err) {
-            if (retries === 0) throw err;
-            await new Promise(resolve => setTimeout(resolve, delay));
-            return fetchWithRetry(retries - 1, delay * 2);
-        }
-    };
 
     useEffect(() => {
-        const getReadings = async () => {
-            try {
-                const data = await fetchWithRetry();
-                if (JSON.stringify(data) !== JSON.stringify(prevReadings.current)) {
-                    setReadings(data);
-                    prevReadings.current = data;
-                    setError(null);
-                }
-            } catch (err) {
-                setError('Failed to fetch readings. Please check the ESP32 connection.');
-            }
-        };
+        const readingsRef = ref(realtimeDb, '/SEUWS/SmartMeter'); // Firebase path
 
-        const interval = setInterval(getReadings, 2500);
-        return () => clearInterval(interval);
+        // Subscribe to Firebase real-time updates
+        const unsubscribe = onValue(readingsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                setReadings(snapshot.val());
+                setError(null);
+            } else {
+                setError("No data available from Firebase.");
+            }
+        }, (error) => {
+            setError("Error fetching data from Firebase.");
+        });
+
+        return () => unsubscribe(); // Cleanup on unmount
     }, []);
 
     useEffect(() => {
@@ -51,18 +41,26 @@ const LiveView = () => {
         }
     }, [readings]);
 
-    // Function to reset energy reading
+    // Function to reset energy reading in Firebase
     const handleResetEnergy = async () => {
         setResetting(true);
         try {
-            await resetEnergy();
-            setReadings(prev => ({ ...prev, energy: 0 })); // Reset UI
+            console.log("Sending reset command to ESP32...");
+            
+            // Set EnergyReset flag in Firebase
+            await set(ref(realtimeDb, "/SEUWS/SmartMeter/EnergyReset"), 1);
+    
+            console.log("Reset command sent successfully!");
+    
+            setReadings(prev => ({ ...prev, energy: 0.0 })); // Update UI
             setWarning(null);
         } catch (err) {
-            setError("Reseting Energy Reading.");
+            console.error("Error resetting energy:", err);
+            setError("Failed to reset energy reading.");
         }
         setResetting(false);
     };
+
 
     return (
         <div className="live-view-container">
@@ -71,10 +69,10 @@ const LiveView = () => {
                 <p className="error-message">{error}</p>
             ) : (
                 <div className="readings-card">
-                    <p><strong>Voltage:</strong> {readings.voltage} V</p>
-                    <p><strong>Current:</strong> {readings.current} A</p>
-                    <p><strong>Power:</strong> {readings.power} W</p>
-                    <p><strong>Energy:</strong> {readings.energy} kWh</p>
+                    <p><strong>Voltage:</strong> {Math.round(readings.Voltage)} V</p>
+                    <p><strong>Current:</strong> {readings.Current} A</p>
+                    <p><strong>Power:</strong> {readings.Power} W</p>
+                    <p><strong>Energy:</strong> {readings.EnergyUsage} kWh</p>
                 </div>
             )}
 
